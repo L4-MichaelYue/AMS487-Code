@@ -1,0 +1,317 @@
+#HW9
+library(tidyverse)
+library(readxl)
+
+df = read_excel("data9.xlsx")
+#data_dictionary=read_excel('data_dictionary.xlsx')
+
+#filter row with Ans.1st=1
+df_filtered = filter(df,Ans.1st==1,preserve=TRUE)
+
+#filter out shaded col
+df_filtered = df_filtered[,-c(1,2,4,6,8,44,47,56,68,70:72,              #remove shaded &
+                               84,90,98,101:103,113:119,121,122,
+                               124:126,128,130,131,133:134,136,138,
+                               142:144,146:150,152:156,158,200:212,
+                               214:219,
+                              34,57,64,77,81,  #remove categorical
+                              35,58,65,73,78)]   #remove 1 dummy for each
+
+
+#dummyRELIGION <- as.data.frame(model.matrix(~ df_filtered$RELIGION - 1))
+#df_filtered = data.frame(df_filtered,dummyRELIGION)
+  
+#Step 2 variable selection
+#Remove a column if 98% or more of the values are the same.
+same=c()
+for (i in 1:ncol(df_filtered)){
+  if (table(df_filtered[ ,i])[which.max(table(df_filtered[ ,i]))]/335 > 0.98){
+    same=append(same,i) #find col with > 98% same
+  }
+}
+df_filtered = df_filtered[,-same] #remove >98% from df
+
+#create dummy for RELIGION
+library(mltools)
+library(data.table)
+
+df_filtered$RELIGION <- as.factor(df_filtered$RELIGION)
+dummy <- one_hot(as.data.table(df_filtered$RELIGION))
+
+#insert created dummies in df
+library(tibble)
+df_filtered=add_column(df_filtered, dummy, .after = 'RELIGION')
+
+#REmove the categorical 'RELIGION' and one dummy from df 49,52
+df_filtered = df_filtered[,-c(48,51)]
+                              
+
+toolbox=matrix(0,ncol(df_filtered)-1,2)
+#change answer from 1 & 2 to 0 & 1
+Y=((df_filtered$Yes_No)-2)*(-1)
+#Y=((df_filtered$Yes_No)-1)
+X=df_filtered%>%select(-Yes_No)%>%as.data.frame()
+#X=subset(df_filtered,select=-c(Yes_No))
+
+
+for (i in 1:(ncol(df_filtered)-1)){
+  mod=glm(Y ~ X[,i],family="binomial")
+  toolbox[i,2]=summary(mod)$coefficients[2,4]
+}
+
+
+
+#for (i in 1:(ncol(df_filtered)-1)){
+  #if (sum(is.na(X[,i])) > 0) { #detect if col have NA
+      #x=X[,i][!is.na(X[,i])]
+      #y=Y[!is.na(X[,i])]
+      #mod=glm(y ~ x,family="binomial")
+      #toolbox[i,2]=summary(mod)$coefficients[2,4]
+  #}
+  #else{
+    #mod=glm(Y ~ X[,i],family="binomial")
+    #toolbox[i,2]=summary(mod)$coefficients[2,4]
+  #}
+#}
+
+toolbox[,1]=colnames(X)
+#toolbox[(toolbox[,2])<0.2,][,1]
+toolbox[as.numeric(toolbox[,2])<0.2,][,1]
+
+
+#(sum(is.na(X[,i])+sum(!X[,i]==-88)+sum(!X[,i]==-99))
+
+#if (sum(is.na(X[,35])) > 0) {
+ # x=X[,35][!is.na(X[,35])]
+  #y=Y[!is.na(X[,35])]
+#if (sum(!x==40) > 0){
+ #   x=x[!x==40]
+  #  y=y[!x==40]
+#}
+#if (sum(!x==60) > 0){
+ #   x=x[!x==60]
+  #  y=y[!x==60]
+#}
+#}
+
+
+#if (sum(!X[,35]==40) > 0) {
+ # X35=X[,35][!X[,35]==40]
+  #Y35=Y[!is.na(X[,35])]
+#}
+#(!X[,35]==40)
+
+
+#for (i in 1:(ncol(df_filtered)-1)){
+ # mod=glm(Y ~ X[,i],family="binomial")
+  #toolbox[i,2]=summary(mod)$coefficients[2,4]
+#}
+#toolbox[,1]=colnames(X)
+
+#iv=df_filtered[,1]
+#dv=(df_filtered[,2]-2)*(-1)
+#Ageq16=data.frame(iv,dv)
+#plot(Ageq16)
+#summary(glm(Ageq16[,2]~Ageq16[,1],family='binomial'))
+
+
+#Test the outlier in Q1A
+#x=X[,34][!is.na(X[,34])]
+#y=Y[!is.na(X[,34])]
+#x=x[-c(58)]
+#y=y[-c(58)]
+
+#boxplot(y~x, plot = FALSE)$out
+#data_no_outlier <- data[-which(data %in% outliers)]
+
+#summary(glm(y~x, family = 'binomial'))
+
+
+
+
+
+##
+#Multi-variable regression
+
+sig=X[toolbox[as.numeric(toolbox[,2])<0.2,][,1]]
+#x=sig[complete.cases(sig), ]
+#x=subset(x,select=-c(Q1A))
+#y=Y[complete.cases(sig)]
+df_multi=cbind(Y,sig)
+#df_multi=subset(df_multi,select=-c(HR))
+df_multi=na.omit(df_multi)
+rownames(df_multi)=NULL
+
+mod=glm(Y~. , family="binomial",data=df_multi)
+summary(mod)
+
+#library(caret)
+#library(leaps) 
+#library(MASS)
+#step.model <- stepAIC(mod, direction = "backward", trace = FALSE)
+#summary(step.model)
+
+#mod=glm(y~Age_Q16+Hospital+CV_Hospital+ChestPain+COPD+LifeThreat+Cancer+FamHisCV+DBP+ HR+Wgt_Lbs+BiVICD+Ischemic+Dosages+Diures+NoRisks+HiChol+Hyperdys+HTN_Hx+Smoker+Black+HighSch+Spouse+retired+EmployFT+EmployPT+Widodiv+Married+DISABLED+ADVANCED_DIRECTIVE+HEALTH_CARE_PROXY+HYPERTENSION+HYPERCHOLESTEROLEMIA+CEREBROVASCULAR_DISEASE+SMOKING+ALCOHOLISM+OBESITY+VALVE_DISEASE+VT_OR_V_FIB+ICD+PRIOR_CABG+ISCHEMICCARD+DIGOXIN+NITRATES+HYDRALLAZINE+RESYNCH_PERFORMED+ICD_IMPLANTED+Item_F+Item_G+Item_I+Q1A+Q1B+Q8+Q10+Q11+Q12+Q13+Q13_1vs2+Q14Down+Split60yrs+Split65yrs+Split64yrs+CRI+BUN+Creatinine+GRF+M.L.E,family=binomial(),data=df_multi)
+
+
+while (any(summary(mod)$coefficient[,4] > 0.05)){
+  if (which.max(summary(mod)$coefficient[,4]) == 1){ #if intercept term has the greatest p-value
+    to_remove=c(names(which.max(summary(mod)$coefficient[,4] #ignore intercept, search for (second) highest
+                                [summary(mod)$coefficient[,4] != max(summary(mod)$coefficient[,4])])))
+    df_multi=df_multi[ , !(names(df_multi) %in% to_remove)] #remove the name from the list
+    mod=glm(Y~ .,family=binomial,data=df_multi) #run regression
+  }
+  else {
+    to_remove=c(names(which.max(summary(mod)$coefficient[,4]))) #extract highest p-value name
+    df_multi=df_multi[ , !(names(df_multi) %in% to_remove)] #remove the name from the list
+    mod=glm(Y~ .,family=binomial,data=df_multi) #run regression again
+  }
+}
+summary(mod)
+
+
+
+
+#x=subset(x,select=-c(Q11)) #remove singularity
+#mod=lm(y~ .,data=x)
+#summary(mod)
+
+#which.max(summary(mod)$coefficient[,4])
+
+#remove col by name
+to_remove=c(names(which.max(summary(mod)$coefficient[,4])))
+df_multi=df_multi[ , !(names(df_multi) %in% to_remove)]
+mod=glm(y~ .,family=binomial,data=df_multi)
+summary(mod)
+to_remove=c(names(which.max(summary(mod)$coefficient[,4])))
+
+#second high name
+to_remove=c(names(which.max(summary(mod)$coefficient[,4][summary(mod)$coefficient[,4] != max(summary(mod)$coefficient[,4])])))
+df_multi=df_multi[ , !(names(df_multi) %in% to_remove)]
+mod=glm(y~ .,family=binomial,data=df_multi)
+summary(mod)
+to_remove=c(names(which.max(summary(mod)$coefficient[,4])))
+
+
+
+
+
+
+#x=x[,-c(which.max(summary(mod)$coefficient[,4])-1)]
+#mod=lm(y~ .,data=x)
+#summary(mod)
+
+
+
+#remove second highest
+#which.max(summary(mod)$coefficient[,4][summary(mod)$coefficient[,4] != max(summary(mod)$coefficient[,4])])
+
+#x=x[,-c(which.max(summary(mod)$coefficient[,4]))]
+#mod=lm(y~ .,data=x)
+#summary(mod)
+#which.max(summary(mod)$coefficient[,4])
+
+
+
+#which.max(summary(mod)$coefficient[,4])
+#x=x[,-c(45)]
+#mod=lm(y~ .,data=x)
+#summary(mod)
+
+#which.max(summary(mod)$coefficient[,4])
+#x=x[,-c(which.max(summary(mod)$coefficient[,4])-1)]
+#mod=lm(y~ .,data=x)
+#summary(mod)
+
+#while (any(summary(mod)$coefficient[,4] > 0.05)){
+  #if (which.max(summary(mod)$coefficient[,4] == 1)){ #check if the highest p is not intercept
+    #x=x[,-c(which.max(summary(mod)$coefficient[,4][summary(mod)$coefficient[,4] != max(summary(mod)$coefficient[,4])]))] 
+    #remove the variable with second-highest p-value
+    #mod=lm(y~ .,data=x)
+  #}
+  #else{
+    #x=x[,-c(which.max(summary(mod)$coefficient[,4]))] #remove the variable with highest p-value
+    #mod=lm(y~ .,data=x) 
+  #}
+#}
+
+
+
+
+
+
+######################################
+
+#while (any(summary(mod)$coefficient[,4] > 0.05)){
+  #x=x[,-c(which.max(summary(mod)$coefficient[,4])-1)] #remove the variable with highest p-value
+  #mod=lm(y~ .,data=x)
+#}
+
+#summary(mod)
+
+#while (any(summary(mod)$coefficient[,4] > 0.05)){
+  #x=x[,-c(which.max(summary(mod)$coefficient[,4])-1)] #remove the variable with highest p-value
+  #mod=lm(y~ .,data=x)
+#}
+
+#summary(mod)
+
+
+#——————————————————————————————————————————————————————————————————
+#polynomial and interaction terms
+
+#sel_vari=rownames(summary(mod)$coefficients)
+#sel_vari=sel_vari[2:13]
+
+#sel_vari=subset(x, select = c(Age_Q16,ChestPain,COPD,Dosages,Diures,Married,ADVANCED_DIRECTIVE,
+                              #HYPERCHOLESTEROLEMIA,PRIOR_CABG,ICD_IMPLANTED,Item_G,Q11))
+
+#check Age_Q16
+mod=glm(Y~COPD+Dosages+ICD+Item_G+
+          poly(Age_Q16,2, raw = TRUE),data=df_multi)
+summary(mod)
+#No second-order poly for Age_Q16
+
+#check COPD
+mod=glm(Y~Age_Q16+Dosages+ICD+Item_G+
+          poly(COPD,2, raw = TRUE),data=df_multi)
+summary(mod)
+#No second-order poly for COPD
+
+#check Dosages
+mod=glm(Y~Age_Q16+COPD+ICD+Item_G+
+          poly(Dosages,2, raw = TRUE),data=df_multi)
+summary(mod)
+#No second-order poly for Dosages
+
+#check ICD
+mod=glm(Y~Age_Q16+COPD+Dosages+Item_G+
+          poly(ICD,2, raw = TRUE),data=df_multi)
+summary(mod)
+#No second-order poly for ICD
+
+#check Item_G
+mod=glm(Y~Age_Q16+COPD+Dosages+ICD+
+          poly(Item_G,2, raw = TRUE),data=df_multi)
+summary(mod)
+#second-order poly for Item_G Return SIGNIFICANT,keep both Item_G and Item_G^2 !!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+#####
+#Interaction terms
+mod=glm(Y~(Age_Q16+COPD+Dosages+ICD+Item_G)^2,family="binomial",data=df_multi)
+summary(mod)
+#####
+#Age_Q16:Dosages, Dosages:Item_G significant
+
+#Final Model
+mod=glm(Y~Age_Q16+COPD+Dosages+ICD+
+          Age_Q16:Dosages+Dosages:Item_G+
+          poly(Item_G,2, raw = TRUE),data=df_multi)
+summary(mod)
+
+
+#Final Model
+mod=glm(Y~Age_Q16+COPD+Dosages+ICD+
+          poly(Item_G,2, raw = TRUE),data=df_multi)
+summary(mod)
